@@ -180,7 +180,7 @@ function tag(p,a){a=a||.05;return isNaN(p)?'':p<a?'<span class="tag-sig">signifi
 function esc(s){return String(s).replace(/[&<>"]/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[m]));}
 
 /* ================= STATE & PARSING ================= */
-let MODE=1, COLS=[];
+let MODE=1, COLS=[], LIKERT_ITEM_MODE=false;
 function detectDelim(l){const c=(l.match(/,/g)||[]).length,s=(l.match(/;/g)||[]).length,t=(l.match(/\t/g)||[]).length;if(t>=c&&t>=s)return '\t';if(s>=c)return ';';return ',';}
 function num(v){if(v==null)return NaN;v=String(v).trim().replace(',','.');return v===''?NaN:parseFloat(v);}
 function parseData(){
@@ -190,7 +190,8 @@ function parseData(){
   const firstNum=rows[0].filter(c=>!isNaN(num(c))).length,hasHead=firstNum<rows[0].length/2;
   const header=hasHead?rows[0]:rows[0].map((_,i)=>'Kolom '+(i+1)),body=hasHead?rows.slice(1):rows;
   COLS=header.map((name,j)=>({name:name||('Kolom '+(j+1)),raw:body.map(r=>r[j])}));
-  msg.innerHTML=`<div class="notice info">Terbaca <b>${body.length}</b> baris &times; <b>${COLS.length}</b> kolom${hasHead?'':' (tanpa judul kolom)'}.</div>`;
+  LIKERT_ITEM_MODE=MODE===2&&detectLikertItemMode();
+  msg.innerHTML=`<div class="notice info">Terbaca <b>${body.length}</b> baris &times; <b>${COLS.length}</b> kolom${hasHead?'':' (tanpa judul kolom)'}.${LIKERT_ITEM_MODE?' Format dikenali sebagai <b>Likert Posttest-Only Eksperimen&ndash;Kontrol</b>.':''}</div>`;
   buildMaps();
   document.getElementById('mapArea').style.display='block';
   document.getElementById('out').style.display='none';
@@ -211,6 +212,19 @@ function buildMaps(){
     if(COLS.length>1)maps.querySelector('#postCol').selectedIndex=1;
   } else {
     const grpIndex=autoCol(/kelompok|group|kelas|grup/i,0);
+    if(LIKERT_ITEM_MODE){
+      const idIndex=autoCol(/^id$|responden|subjek|siswa/i,0);
+      const itemNames=getLikertItemColumns().map(i=>COLS[i].name);
+      maps.innerHTML=`
+       <input type="hidden" id="grpCol" value="${grpIndex}">
+       <input type="hidden" id="idCol" value="${idIndex}">
+       <div class="notice info" style="margin-top:0">
+         Mode otomatis: <b>Likert Posttest-Only Eksperimen&ndash;Kontrol</b><br>
+         ID = ${esc(COLS[idIndex]?.name||'')}; Kelompok = ${esc(COLS[grpIndex]?.name||'')};
+         Butir = ${itemNames.map(esc).join(', ')}.
+       </div>`;
+      return;
+    }
     const preIndex=autoCol(/pretest|msi_pre|(^|[_\s-])pre($|[_\s-])/i,1);
     const postIndex=autoCol(/posttest|msi_post|(^|[_\s-])post($|[_\s-])/i,2);
     maps.innerHTML=`
@@ -226,6 +240,122 @@ function buildMaps(){
   }
 }
 function colNum(i){return COLS[i].raw.map(num);}
+
+/* ================= LIKERT ITEM POSTTEST-ONLY ================= */
+function getLikertItemColumns(){
+  const id=COLS.findIndex(c=>/^id$|^(id[_\s-])|responden|subjek|siswa/i.test(String(c.name).trim()));
+  const group=COLS.findIndex(c=>/kelompok|group|kelas|grup/i.test(String(c.name)));
+  const named=COLS.map((c,i)=>({i,name:String(c.name).trim()}))
+    .filter(c=>c.i!==id&&c.i!==group&&/^(b|butir|item|i)[_\s-]*\d+$/i.test(c.name))
+    .map(c=>c.i);
+  if(named.length>=3)return named;
+  return COLS.map((_,i)=>i).filter(i=>i!==id&&i!==group&&!/pretest|posttest|msi_pre|msi_post|total/i.test(String(COLS[i].name)));
+}
+function detectLikertItemMode(){
+  if(MODE!==2||!COLS.length)return false;
+  const hasID=COLS.some(c=>/^id$|^(id[_\s-])|responden|subjek|siswa/i.test(String(c.name).trim()));
+  const hasPrePost=COLS.some(c=>/pretest|posttest|msi_pre|msi_post|(^|[_\s-])(pre|post)($|[_\s-])/i.test(String(c.name)));
+  return hasID&&!hasPrePost&&getLikertItemColumns().length>=1;
+}
+function msiPerItem(rows,itemColumns,scaleMax){
+  const conversions={};
+  itemColumns.forEach(i=>{
+    const values=rows.map(r=>r.raw[i]);
+    const converted=MSI_transform(values,scaleMax);
+    conversions[i]={
+      item:COLS[i].name,
+      scores:converted.scores,
+      freq:Array.from({length:scaleMax},(_,k)=>values.filter(v=>v===k+1).length),
+      n:values.length
+    };
+  });
+  return conversions;
+}
+function buildIndividualMSITotal(rows,itemColumns,conversions){
+  return rows.map(r=>{
+    const msi=itemColumns.map(i=>conversions[i].scores[r.raw[i]-1]);
+    return{id:r.id,group:r.group,msi,total:msi.reduce((s,v)=>s+v,0)};
+  });
+}
+function likertRawTable(rows,itemColumns){
+  const head=`<tr><th>ID</th><th>Kelompok</th>${itemColumns.map(i=>`<th>${esc(COLS[i].name)}</th>`).join('')}</tr>`;
+  const body=rows.map(r=>`<tr><td class="lab">${esc(r.id)}</td><td class="lab">${esc(r.group)}</td>${itemColumns.map(i=>`<td>${r.raw[i]}</td>`).join('')}</tr>`).join('');
+  return cap('Data Mentah (Kasus Lengkap)')+tbl(head+body);
+}
+function likertConversionTable(itemColumns,conversions,scaleMax){
+  const rows=itemColumns.map(i=>Array.from({length:scaleMax},(_,k)=>{
+    const c=conversions[i],freq=c.freq[k],score=c.scores[k];
+    return `<tr><td class="lab">${esc(c.item)}</td><td>${k+1}</td><td>${freq}</td><td>${f3(freq/c.n)}</td><td>${f3(score)}</td></tr>`;
+  }).join('')).join('');
+  return cap('Tabel Konversi MSI per Butir')+tbl(`<tr><th>Item</th><th>Kategori Likert</th><th>Frekuensi</th><th>Proporsi</th><th>Skor MSI</th></tr>${rows}`);
+}
+function likertIndividualTable(data,itemColumns){
+  const head=`<tr><th>ID</th><th>Kelompok</th>${itemColumns.map(i=>`<th>MSI_${esc(COLS[i].name)}</th>`).join('')}<th>Total_MSI_Posttest</th></tr>`;
+  const body=data.map(r=>`<tr><td class="lab">${esc(r.id)}</td><td class="lab">${esc(r.group)}</td>${r.msi.map(v=>`<td>${f3(v)}</td>`).join('')}<td>${f3(r.total)}</td></tr>`).join('');
+  return cap('Skor MSI per Individu')+tbl(head+body);
+}
+function likertDescriptives(data,groups){
+  const rows=groups.map(g=>{
+    const a=data.filter(r=>r.group===g).map(r=>r.total);
+    return `<tr><td class="lab">${esc(g)}</td><td>${a.length}</td><td>${f3(mean(a))}</td><td>${f3(sd(a))}</td><td>${f3(Math.min(...a))}</td><td>${f3(Math.max(...a))}</td></tr>`;
+  }).join('');
+  return cap('Statistik Deskriptif per Kelompok')+tbl(`<tr><th>Kelompok</th><th>N</th><th>Mean</th><th>Std. Deviation</th><th>Minimum</th><th>Maximum</th></tr>${rows}`);
+}
+function runLikertPosttestOnlyQuasi(){
+  const out=document.getElementById('out');out.innerHTML='';out.style.display='block';
+  document.getElementById('downloadArea').style.display='none';
+  const idIndex=COLS.findIndex(c=>/^id$|^(id[_\s-])|responden|subjek|siswa/i.test(String(c.name).trim()));
+  const groupIndex=COLS.findIndex(c=>/kelompok|group|kelas|grup/i.test(String(c.name)));
+  const itemColumns=getLikertItemColumns();
+  if(groupIndex<0){out.innerHTML=block('Galat','<div class="notice err">Kolom Kelompok tidak ditemukan.</div>');return;}
+  if(idIndex<0){out.innerHTML=block('Galat','<div class="notice err">Kolom ID tidak ditemukan.</div>');return;}
+  if(itemColumns.length<3){out.innerHTML=block('Peringatan','<div class="notice warn">Jumlah butir terlalu sedikit. Gunakan sedikitnya 3 kolom butir Likert.</div>');return;}
+  const groups=[...new Set(COLS[groupIndex].raw.map(v=>String(v).trim()).filter(Boolean))];
+  if(groups.length!==2){out.innerHTML=block('Galat','<div class="notice err">Kolom Kelompok harus memiliki tepat 2 kelompok.</div>');return;}
+  let invalid=0,dropped=0,scaleMax=4;
+  const rows=[];
+  for(let r=0;r<COLS[0].raw.length;r++){
+    const id=String(COLS[idIndex].raw[r]??'').trim(),group=String(COLS[groupIndex].raw[r]??'').trim();
+    const values=itemColumns.map(i=>num(COLS[i].raw[r]));
+    const source=itemColumns.map(i=>String(COLS[i].raw[r]??'').trim());
+    if(!id||!group||source.some(v=>v==='')){dropped++;continue;}
+    if(values.some(v=>!Number.isInteger(v)||v<1||v>5)){invalid++;continue;}
+    if(values.some(v=>v===5))scaleMax=5;
+    rows.push({id,group,raw:Object.fromEntries(itemColumns.map((i,k)=>[i,values[k]]))});
+  }
+  if(invalid){out.innerHTML=block('Galat',`<div class="notice err">Ditemukan <b>${invalid}</b> baris dengan nilai butir bukan bilangan bulat 1&ndash;5. Perbaiki data sebelum analisis.</div>`);return;}
+  const usedGroups=[...new Set(rows.map(r=>r.group))];
+  if(usedGroups.length!==2){out.innerHTML=block('Galat','<div class="notice err">Setelah kasus tidak lengkap dibuang, data harus tetap memiliki tepat 2 kelompok.</div>');return;}
+  if(usedGroups.some(g=>rows.filter(r=>r.group===g).length<3)){out.innerHTML=block('Galat','<div class="notice err">Tiap kelompok perlu minimal 3 siswa dengan data lengkap.</div>');return;}
+  const conversions=msiPerItem(rows,itemColumns,scaleMax);
+  const individual=buildIndividualMSITotal(rows,itemColumns,conversions);
+  if(individual.some(r=>!Number.isFinite(r.total))){out.innerHTML=block('Galat','<div class="notice err">MSI tidak dapat dihitung karena ada kategori respons yang tidak memiliki skor konversi valid.</div>');return;}
+  const a=individual.filter(r=>r.group===usedGroups[0]).map(r=>r.total);
+  const b=individual.filter(r=>r.group===usedGroups[1]).map(r=>r.total);
+  const swA=shapiroWilk(a),swB=shapiroWilk(b),ksA=ksLilliefors(a),ksB=ksLilliefors(b);
+  const normal=swA.p>=.05&&swB.p>=.05;
+  let testHtml=tNormality([
+    {label:`Total_MSI_Posttest Â· ${usedGroups[0]}`,sw:swA,ks:ksA},
+    {label:`Total_MSI_Posttest Â· ${usedGroups[1]}`,sw:swB,ks:ksB}
+  ]);
+  if(normal){
+    const lev=levene([a,b]),it=independentT(a,b),homog=lev.p>=.05,row=homog?it.pooled:it.welch;
+    testHtml+=tIndepTest(it,lev,'Total_MSI_Posttest')+
+      interp(`Kedua kelompok berdistribusi normal. Levene Sig. = ${sig(lev.p)} sehingga digunakan <b>${homog?'Independent Samples t-test (equal variances assumed)':'Welch t-test (equal variances not assumed)'}</b>. t = ${f3(row.t)}, df = ${f2(row.df)}, Sig. = ${sig(row.p)} &rarr; ${tag(row.p)}.`);
+  }else{
+    const mw=mannWhitney(a,b),r=rZeff(mw.z,a.length+b.length);
+    testHtml+=tMannWhitney(mw,usedGroups,'Total_MSI_Posttest')+
+      tEffectNonpar(r,'Total_MSI_Posttest',`N = ${a.length+b.length}`)+
+      interp(`Sedikitnya satu kelompok tidak normal, sehingga digunakan <b>Mann&ndash;Whitney U</b>. U = ${f3(mw.U)}, Z = ${f3(mw.z)}, Sig. = ${sig(mw.p)} &rarr; ${tag(mw.p)}.`);
+  }
+  const warning=dropped?`<div class="notice warn"><b>${dropped}</b> kasus tidak lengkap diabaikan. Analisis memakai ${individual.length} siswa dengan respons lengkap.</div>`:'';
+  out.innerHTML=block('Likert Posttest-Only Eksperimen&ndash;Kontrol',
+    `<div class="notice info">Data ordinal ditransformasi dengan MSI secara terpisah pada setiap butir skala 1&ndash;${scaleMax}. Unit analisis tetap siswa (${a.length} vs ${b.length}), bukan jumlah sel jawaban.</div>`+
+    warning+likertRawTable(rows,itemColumns)+likertConversionTable(itemColumns,conversions,scaleMax)+
+    likertIndividualTable(individual,itemColumns)+likertDescriptives(individual,usedGroups)+testHtml+
+    interp('Karena data Likert terdeteksi sebagai data ordinal, program melakukan transformasi MSI per butir terlebih dahulu. Uji beda dilakukan terhadap skor total MSI posttest per individu, bukan terhadap seluruh sel jawaban.'));
+  finishOutput();
+}
 
 /* ================= AUTOMATIC MSI ================= */
 function MSI_density(z){
@@ -898,13 +1028,14 @@ function setMode(m){MODE=m;
   document.getElementById('m2btn').classList.toggle('active',m===2);
   document.getElementById('modeHint').textContent=m===1
     ?'Desain pretest–posttest satu kelompok: menguji perubahan dari pretest ke posttest.'
-    :'Format otomatis: satu baris per responden dengan kolom Kelompok, Pretest, dan Posttest.';
+    :'Format otomatis: pretest-posttest numerik, atau posttest-only Likert mentah dengan kolom ID, Kelompok, dan butir.';
+  LIKERT_ITEM_MODE=detectLikertItemMode();
   if(COLS.length)buildMaps();
 }
 document.getElementById('m1btn').addEventListener('click',()=>setMode(1));
 document.getElementById('m2btn').addEventListener('click',()=>setMode(2));
 document.getElementById('parseBtn').addEventListener('click',parseData);
-document.getElementById('runBtn').addEventListener('click',()=>MODE===1?runMode1():runMode2());
+document.getElementById('runBtn').addEventListener('click',()=>MODE===1?runMode1():(detectLikertItemMode()?runLikertPosttestOnlyQuasi():runMode2()));
 document.getElementById('downloadBtn').addEventListener('click',downloadOutput);
 function loadExample(kind){
   let rows;
@@ -925,8 +1056,39 @@ function loadExample(kind){
   } else {
     let eP,eQ,kP,kQ;
     if(kind==='likert'){
-      eP=[1,2,3,4,2,3,1,2,4,3,2,3]; eQ=[3,4,5,5,4,5,3,4,5,4,4,5];
-      kP=[1,2,3,4,2,3,1,2,4,3,2,3]; kQ=[2,3,4,4,3,4,2,3,4,4,3,4];
+      rows=[
+        ['ID','Kelompok','B1','B2','B3','B4','B5','B6','B7','B8'],
+        ['S01','Eksperimen',5,4,5,4,4,2,2,2],
+        ['S02','Eksperimen',5,4,4,2,3,3,1,3],
+        ['S03','Eksperimen',4,5,4,4,5,3,2,3],
+        ['S04','Eksperimen',5,5,4,3,4,2,3,2],
+        ['S05','Eksperimen',4,4,5,4,3,3,2,2],
+        ['S06','Eksperimen',5,4,5,3,4,2,1,3],
+        ['S07','Eksperimen',4,5,4,4,4,3,2,2],
+        ['S08','Eksperimen',5,4,3,4,5,2,2,3],
+        ['S09','Eksperimen',4,4,5,3,4,3,1,2],
+        ['S10','Eksperimen',5,5,4,4,3,2,2,3],
+        ['S11','Eksperimen',4,3,4,5,4,3,2,2],
+        ['S12','Eksperimen',5,4,5,3,5,2,3,1],
+        ['S13','Eksperimen',4,5,4,4,4,3,2,3],
+        ['S14','Eksperimen',5,4,3,5,4,2,1,2],
+        ['S15','Eksperimen',4,4,5,4,3,3,2,3],
+        ['S16','Kontrol',3,3,4,3,3,2,2,2],
+        ['S17','Kontrol',4,3,3,2,3,2,1,2],
+        ['S18','Kontrol',3,4,3,3,4,2,2,1],
+        ['S19','Kontrol',4,3,2,4,3,1,2,2],
+        ['S20','Kontrol',3,3,4,2,3,2,1,3],
+        ['S21','Kontrol',4,4,3,3,2,1,2,2],
+        ['S22','Kontrol',3,2,3,4,3,2,2,1],
+        ['S23','Kontrol',4,3,4,2,3,1,1,2],
+        ['S24','Kontrol',3,4,2,3,4,2,2,2],
+        ['S25','Kontrol',4,3,3,4,2,1,2,1],
+        ['S26','Kontrol',3,2,4,3,3,2,1,2],
+        ['S27','Kontrol',4,4,3,2,3,1,2,2],
+        ['S28','Kontrol',3,3,2,4,4,2,1,1],
+        ['S29','Kontrol',4,2,3,3,3,1,2,2],
+        ['S30','Kontrol',4,3,2,4,3,1,2,1]
+      ];
     } else if(kind==='normal'){
       eP=[62,58,71,49,65,70,55,60,68,52,74,61,57,66,63]; eQ=[78,70,80,66,77,82,69,75,79,68,85,76,72,81,74];
       kP=[60,57,69,50,64,68,54,59,66,53,72,60,56,65,62]; kQ=[66,63,73,58,70,74,61,67,72,60,77,66,64,73,69];
@@ -934,11 +1096,13 @@ function loadExample(kind){
       eP=[60,57,62,58,64,59,61,57,63,60,58,65,59,62,61]; eQ=[98,100,97,99,100,96,98,100,97,99,72,100,98,69,100];
       kP=[59,56,61,57,63,58,60,56,62,59,57,64,58,61,60]; kQ=[80,75,82,78,84,79,81,77,83,80,76,85,79,82,81];
     }
-    rows=[['Kelompok','Pretest','Posttest']];
-    for(let i=0;i<eP.length;i++)rows.push(['Eksperimen',eP[i],eQ[i]]);
-    for(let i=0;i<kP.length;i++)rows.push(['Kontrol',kP[i],kQ[i]]);
+    if(kind!=='likert'){
+      rows=[['Kelompok','Pretest','Posttest']];
+      for(let i=0;i<eP.length;i++)rows.push(['Eksperimen',eP[i],eQ[i]]);
+      for(let i=0;i<kP.length;i++)rows.push(['Kontrol',kP[i],kQ[i]]);
+    }
   }
-  document.getElementById('raw').value=rows.map(r=>r.join('\t')).join('\n');
+  document.getElementById('raw').value=rows.map(r=>r.join(kind==='likert'&&MODE===2?',':'\t')).join('\n');
   parseData();
 }
 document.getElementById('exNormBtn').addEventListener('click',()=>loadExample('normal'));
