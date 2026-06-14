@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>ANALISIS PENELITIAN KUANTITATIF </title>
+<title>Analisa Penelitian Kuantitatif</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
@@ -380,6 +380,14 @@ function tEffect(d,g,label){
     <tr><th class="lab" rowspan="2">${esc(label)}</th><td class="lab">Cohen's d</td><td class="num">${f3(d)}</td></tr>
     <tr><td class="lab">Hedges' correction</td><td class="num">${f3(g)}</td></tr>`);
 }
+function rZeff(z,N){return N>0&&Number.isFinite(z)?Math.abs(z)/Math.sqrt(N):NaN;}
+function rLabel(r){if(!Number.isFinite(r))return'';const a=Math.abs(r);return a<.10?'dapat diabaikan':a<.30?'kecil':a<.50?'sedang':'besar';}
+function tEffectNonpar(r,label,nNote){
+  return cap('Effect Sizes')+tbl(`
+    <tr><th class="corner" colspan="2"></th><th>Point Estimate</th></tr>
+    <tr><th class="lab">${esc(label)}</th><td class="lab">r (|Z| / √N)</td><td class="num">${f3(r)}</td></tr>`)+
+    `<div class="spss-foot">r = |Z| / √N (${nNote}); ambang Cohen: &lt;.10 dapat diabaikan, .10–.30 kecil, .30–.50 sedang, ≥.50 besar. Besar efek: <b>${rLabel(r)}</b>.</div>`;
+}
 function interp(html){return `<div class="interp">${html}</div>`;}
 function dLabel(d){const a=Math.abs(d);return a>=.8?'besar':a>=.5?'sedang':a>=.2?'kecil':'sangat kecil';}
 function outliers(arr){const s=[...arr].sort((a,b)=>a-b),n=s.length;const q=p=>{const idx=p*(n-1),lo=Math.floor(idx),hi=Math.ceil(idx);return s[lo]+(s[hi]-s[lo])*(idx-lo);};const q1=q(.25),q3=q(.75),iqr=q3-q1,lf=q1-1.5*iqr,uf=q3+1.5*iqr;return{out:arr.filter(v=>v<lf||v>uf),lf,uf};}
@@ -459,9 +467,11 @@ function runMode1(){
       tPairedTest(pt,labels)+tEffect(eff.d,eff.g,`${labels[1]} − ${labels[0]}`)+
       interp(`t(${pt.df}) = ${f3(pt.t)}, Sig. (2-tailed) = ${sig(pt.p)} ⇒ ${tag(pt.p)}. Rata-rata berubah dari ${f2(mean(pre))} menjadi ${f2(mean(post))} (selisih ${f2(pt.meanDiff)}). Ukuran efek Cohen's d = ${f3(eff.d)} (${dLabel(eff.d)}).`));
   } else {
+    const rW=rZeff(wx.z,2*pre.length);
     html+=block('Uji Beda — Wilcoxon Signed Ranks',
       tWilcoxon(wx,labels)+
-      interp(`Z = ${f3(wx.z)}, Asymp. Sig. (2-tailed) = ${sig(wx.p)} ⇒ ${tag(wx.p)}. Ranking positif = ${wx.nPos}, negatif = ${wx.nNeg}, ties = ${wx.nTie}.`)+
+      tEffectNonpar(rW,`${labels[1]} − ${labels[0]}`,`N = 2 × jumlah pasangan = ${2*pre.length}`)+
+      interp(`Z = ${f3(wx.z)}, Asymp. Sig. (2-tailed) = ${sig(wx.p)} ⇒ ${tag(wx.p)}. Ranking positif = ${wx.nPos}, negatif = ${wx.nNeg}, ties = ${wx.nTie}. Ukuran efek r = ${f3(rW)} ⇒ efek ${rLabel(rW)}.`)+
       buildAdvice([{label:`Selisih (${labels[1]} − ${labels[0]})`,arr:diff}]));
   }
   if(!msi.applied){
@@ -498,8 +508,10 @@ function compareBlock(title,arrE,arrK,names,varName){
     html+=tEffect(it.d,it.g,varName);
     html+=interp(`Levene F = ${f3(lev.W)}, Sig. = ${sig(lev.p)} ⇒ varians ${homog?'<b>homogen</b> ⇒ baca baris <i>equal variances assumed</i>':'<b>tidak homogen</b> ⇒ baca baris <i>equal variances not assumed</i> (Welch)'}. t = ${f3(row.t)}, df = ${f2(row.df)}, Sig. = ${sig(row.p)} ⇒ ${tag(row.p)}. Selisih rata-rata ${names[0]}−${names[1]} = ${f2(it.meanDiff)}; Cohen's d = ${f3(it.d)} (${dLabel(it.d)}).`);
   } else {
+    const rM=rZeff(mw.z,mw.n1+mw.n2);
     html+=tMannWhitney(mw,names,varName);
-    html+=interp(`Mann–Whitney U = ${f3(mw.U)}, Z = ${f3(mw.z)}, Asymp. Sig. = ${sig(mw.p)} ⇒ ${tag(mw.p)}.`);
+    html+=tEffectNonpar(rM,varName,`N = N₁ + N₂ = ${mw.n1+mw.n2}`);
+    html+=interp(`Mann–Whitney U = ${f3(mw.U)}, Z = ${f3(mw.z)}, Asymp. Sig. = ${sig(mw.p)} ⇒ ${tag(mw.p)}. Ukuran efek r = ${f3(rM)} ⇒ efek ${rLabel(rM)}.`);
     html+=buildAdvice([{label:`${varName} · ${names[0]}`,arr:arrE},{label:`${varName} · ${names[1]}`,arr:arrK}]);
   }
   return block(title,html);
@@ -548,9 +560,10 @@ function runMode2(){
       const swN=shapiroWilk(ngE).p>=.05&&shapiroWilk(ngK).p>=.05;
       const levN=levene([ngE,ngK]),itN=independentT(ngE,ngK),mwN=mannWhitney(ngE,ngK);
       if(swN){const homog=levN.p>=.05,row=homog?itN.pooled:itN.welch;
-        ngHtml+=tIndepTest(itN,levN,'N-Gain')+interp(`Perbandingan N-Gain: t = ${f3(row.t)}, df = ${f2(row.df)}, Sig. = ${sig(row.p)} ⇒ ${tag(row.p)}. ${row.p<.05?'Peningkatan kelompok '+(clE.g>clK.g?E.name:K.name)+' lebih tinggi secara signifikan.':'Tidak ada beda peningkatan yang signifikan antar kelompok.'}`);
+        ngHtml+=tIndepTest(itN,levN,'N-Gain')+tEffect(itN.d,itN.g,'N-Gain')+interp(`Perbandingan N-Gain: t = ${f3(row.t)}, df = ${f2(row.df)}, Sig. = ${sig(row.p)} ⇒ ${tag(row.p)}. ${row.p<.05?'Peningkatan kelompok '+(clE.g>clK.g?E.name:K.name)+' lebih tinggi secara signifikan.':'Tidak ada beda peningkatan yang signifikan antar kelompok.'} Cohen's d = ${f3(itN.d)} (${dLabel(itN.d)}).`);
       } else {
-        ngHtml+=tMannWhitney(mwN,names,'N-Gain')+interp(`Perbandingan N-Gain (non-parametrik): Mann–Whitney U = ${f3(mwN.U)}, Z = ${f3(mwN.z)}, Asymp. Sig. = ${sig(mwN.p)} ⇒ ${tag(mwN.p)}.`);
+        const rNG=rZeff(mwN.z,mwN.n1+mwN.n2);
+        ngHtml+=tMannWhitney(mwN,names,'N-Gain')+tEffectNonpar(rNG,'N-Gain',`N = N₁ + N₂ = ${mwN.n1+mwN.n2}`)+interp(`Perbandingan N-Gain (non-parametrik): Mann–Whitney U = ${f3(mwN.U)}, Z = ${f3(mwN.z)}, Asymp. Sig. = ${sig(mwN.p)} ⇒ ${tag(mwN.p)}. Ukuran efek r = ${f3(rNG)} ⇒ efek ${rLabel(rNG)}.`);
       }
     }
     out.innerHTML+=block('Perbandingan N-Gain antar Kelompok',ngHtml);
@@ -686,29 +699,136 @@ function KAT_anovaTable(anova){
     <tr><td class="lab">Total Terkoreksi</td><td>${f3(anova.total.ss)}</td><td>${anova.total.df}</td><td></td><td></td><td></td><td></td></tr>`)+
     '<div class="spss-foot">SS parsial dihitung dengan model linear pengkodean efek, sehingga dapat menangani ukuran sel yang tidak sama.</div>';
 }
-function KAT_followups(data,groups,categories){
-  const rows=[],texts=[];
-  categories.forEach(cat=>{
-    const a=data.filter(d=>d.category===cat&&d.group===groups[0]).map(d=>d.ngain);
-    const b=data.filter(d=>d.category===cat&&d.group===groups[1]).map(d=>d.ngain);
-    if(a.length<2||b.length<2){
-      rows.push(`<tr><td class="lab">${cat}</td><td>${a.length}</td><td>${b.length}</td><td colspan="5">Data tidak cukup</td></tr>`);return;
-    }
-    const normal=a.length>=3&&b.length>=3&&shapiroWilk(a).p>=.05&&shapiroWilk(b).p>=.05;
-    let test,stat,df='',p,diff=mean(a)-mean(b);
-    const combined=a.concat(b);
-    if(combined.every(v=>v===combined[0])){
-      test='Tidak ada variasi';stat=0;p=1;
-    }else if(normal){
-      const it=independentT(a,b),lev=levene([a,b]),result=lev.p>=.05?it.pooled:it.welch;
-      test=lev.p>=.05?'Independent t-test':'Welch t-test';stat=result.t;df=f2(result.df);p=result.p;
-    }else{
-      const mw=mannWhitney(a,b);test='Mann–Whitney U';stat=mw.U;p=mw.p;
-    }
-    rows.push(`<tr><td class="lab">${cat}</td><td>${a.length}</td><td>${b.length}</td><td>${test}</td><td>${f3(stat)}</td><td>${df}</td><td>${sig(p)}</td><td>${p<.05?'Signifikan':'Tidak signifikan'}</td></tr>`);
-    texts.push(`${cat}: ${p<.05?(diff>0?groups[0]+' lebih efektif daripada '+groups[1]:groups[1]+' lebih efektif daripada '+groups[0]):'tidak ada perbedaan efektivitas yang signifikan'} (Sig. = ${sig(p)}).`);
+function KAT_holm(pvals){
+  /* Holm step-down: kembalikan p terkoreksi sejajar urutan input, dijaga monoton. */
+  const order=pvals.map((p,i)=>({p,i})).sort((x,y)=>x.p-y.p),m=pvals.length,adj=new Array(m);let prev=0;
+  order.forEach((o,k)=>{let v=Math.min(1,(m-k)*o.p);v=Math.max(v,prev);prev=v;adj[o.i]=v;});
+  return adj;
+}
+function KAT_followups(data,groups,categories,mse,dfError){
+  /* Simple effect PARAMETRIK (konsisten dengan ANOVA/F): Eksperimen vs Kontrol dalam tiap kategori,
+     memakai galat gabungan model (MSE, df error), koreksi Bonferroni & Holm; keputusan p Holm < .05. */
+  const present=categories.filter(cat=>data.some(d=>d.category===cat));
+  const cells=present.map(cat=>({
+    cat,
+    a:data.filter(d=>d.category===cat&&d.group===groups[0]).map(d=>d.ngain),
+    b:data.filter(d=>d.category===cat&&d.group===groups[1]).map(d=>d.ngain)
+  }));
+  const valid=cells.filter(c=>c.a.length>=1&&c.b.length>=1&&mse>0&&dfError>0);
+  const m=Math.max(1,valid.length);
+  const tests=valid.map(c=>{
+    const se=Math.sqrt(mse*(1/c.a.length+1/c.b.length)),diff=mean(c.a)-mean(c.b),t=se>0?diff/se:0;
+    return{cat:c.cat,nA:c.a.length,nB:c.b.length,diff,t,p:tTwoTailP(t,dfError)};
   });
-  return block('Uji Lanjut per Kategori',tbl(`<tr><th>Kategori</th><th>N ${esc(groups[0])}</th><th>N ${esc(groups[1])}</th><th>Uji</th><th>Statistik</th><th>df</th><th>Sig.</th><th>Keputusan</th></tr>${rows.join('')}`)+interp(texts.join('<br>')));
+  const holm=KAT_holm(tests.map(x=>x.p)),rows=[],texts=[];
+  tests.forEach((x,k)=>{
+    const pB=Math.min(1,x.p*m),pH=holm[k],dec=pH<.05;
+    rows.push(`<tr><td class="lab">${x.cat}</td><td>${x.nA}</td><td>${x.nB}</td><td>${f3(x.diff)}</td><td>${f3(x.t)}</td><td>${dfError}</td><td>${sig(x.p)}</td><td>${sig(pB)}</td><td>${sig(pH)}</td><td>${dec?'Signifikan':'Tidak signifikan'}</td></tr>`);
+    texts.push(`${x.cat}: ${dec?(x.diff>0?esc(groups[0])+' lebih efektif daripada '+esc(groups[1]):esc(groups[1])+' lebih efektif daripada '+esc(groups[0])):'tidak ada perbedaan efektivitas yang signifikan'} (p Holm = ${sig(pH)}).`);
+  });
+  cells.filter(c=>!(c.a.length>=1&&c.b.length>=1)).forEach(c=>{
+    rows.push(`<tr><td class="lab">${c.cat}</td><td>${c.a.length}</td><td>${c.b.length}</td><td colspan="7">Data tidak cukup</td></tr>`);
+  });
+  const note=`Interaksi signifikan ⇒ efektivitas kelompok bergantung pada kategori kemampuan awal. Simple effect parametrik (${esc(groups[0])} vs ${esc(groups[1])}) dalam tiap kategori memakai galat gabungan ANOVA (MSE = ${f3(mse)}, df = ${dfError}) dengan koreksi Bonferroni &amp; Holm; keputusan berdasarkan p Holm &lt; .05.`;
+  return block('Uji Lanjut (Simple Effect) per Kategori',tbl(`<tr><th>Kategori</th><th>N ${esc(groups[0])}</th><th>N ${esc(groups[1])}</th><th>Beda Mean</th><th>t</th><th>df</th><th>Sig.</th><th>Sig. Bonferroni</th><th>Sig. Holm</th><th>Keputusan</th></tr>${rows.join('')}`)+interp(note+'<br>'+texts.join('<br>')));
+}
+function KAT_categoryPosthoc(data,categories,mse,dfError,interactionSig){
+  /* Post hoc PARAMETRIK efek utama Kategori (≥3 taraf), konsisten dengan ANOVA/F.
+     Pairwise antar kategori (digabung lintas kelompok) memakai galat gabungan model (MSE, df error),
+     koreksi Bonferroni & Holm; keputusan p Holm < .05. */
+  const present=categories.filter(cat=>data.some(d=>d.category===cat));
+  const stat=present.map(cat=>{const v=data.filter(d=>d.category===cat).map(d=>d.ngain);return{cat,n:v.length,m:mean(v)};});
+  const pairs=[];
+  for(let i=0;i<stat.length;i++)for(let j=i+1;j<stat.length;j++)pairs.push([stat[i],stat[j]]);
+  const valid=pairs.filter(([a,b])=>a.n>=1&&b.n>=1&&mse>0&&dfError>0);
+  const m=Math.max(1,valid.length);
+  const tests=valid.map(([a,b])=>{
+    const se=Math.sqrt(mse*(1/a.n+1/b.n)),diff=a.m-b.m,t=se>0?diff/se:0;
+    return{a,b,diff,t,p:tTwoTailP(t,dfError)};
+  });
+  const holm=KAT_holm(tests.map(x=>x.p)),rows=[],texts=[];
+  tests.forEach((x,k)=>{
+    const pB=Math.min(1,x.p*m),pH=holm[k],dec=pH<.05;
+    rows.push(`<tr><td class="lab">${x.a.cat} vs ${x.b.cat}</td><td>${f3(x.diff)}</td><td>${f3(x.t)}</td><td>${dfError}</td><td>${sig(x.p)}</td><td>${sig(pB)}</td><td>${sig(pH)}</td><td>${dec?'Signifikan':'Tidak signifikan'}</td></tr>`);
+    texts.push(`${x.a.cat} vs ${x.b.cat}: ${dec?(x.diff>0?'N-Gain '+x.a.cat+' lebih tinggi daripada '+x.b.cat:'N-Gain '+x.b.cat+' lebih tinggi daripada '+x.a.cat):'tidak ada perbedaan N-Gain yang signifikan'} (p Holm = ${sig(pH)}).`);
+  });
+  pairs.filter(([a,b])=>!(a.n>=1&&b.n>=1)).forEach(([a,b])=>{
+    rows.push(`<tr><td class="lab">${a.cat} vs ${b.cat}</td><td colspan="7">Data tidak cukup</td></tr>`);
+  });
+  let note=`Efek utama Kategori signifikan ⇒ uji lanjut PARAMETRIK perbandingan pasangan N-Gain antar kategori (digabung lintas kelompok) memakai galat gabungan ANOVA (MSE = ${f3(mse)}, df = ${dfError}) dengan koreksi Bonferroni &amp; Holm. Keputusan berdasarkan p Holm &lt; .05.`;
+  if(interactionSig)note+=' <b>Catatan:</b> karena interaksi kelompok × kategori juga signifikan, tafsirkan efek utama ini dengan hati-hati dan perhatikan pula uji simple effect di bawah.';
+  return block('Uji Lanjut (Post Hoc) Efek Kategori',tbl(`<tr><th>Perbandingan</th><th>Beda Mean</th><th>t</th><th>df</th><th>Sig.</th><th>Sig. Bonferroni</th><th>Sig. Holm</th><th>Keputusan</th></tr>${rows.join('')}`)+interp(note+'<br>'+texts.join('<br>')));
+}
+/* ----- Jalur NONPARAMETRIK untuk bagian kategori (dipakai bila asumsi normalitas dilanggar) ----- */
+function gserGamma(a,x){let ap=a,sum=1/a,del=sum;for(let n=0;n<300;n++){ap++;del*=x/ap;sum+=del;if(Math.abs(del)<Math.abs(sum)*1e-13)break;}return sum*Math.exp(-x+a*Math.log(x)-logGamma(a));}
+function gcfGamma(a,x){const F=1e-30;let b=x+1-a,c=1/F,d=1/b,h=d;for(let i=1;i<=300;i++){const an=-i*(i-a);b+=2;d=an*d+b;if(Math.abs(d)<F)d=F;c=b+an/c;if(Math.abs(c)<F)c=F;d=1/d;const del=d*c;h*=del;if(Math.abs(del-1)<1e-13)break;}return Math.exp(-x+a*Math.log(x)-logGamma(a))*h;}
+function chiSqP(x,df){if(x<=0||df<=0)return 1;const a=df/2,xx=x/2;return xx<a+1?1-gserGamma(a,xx):gcfGamma(a,xx);}
+function KAT_ranks(values){const idx=values.map((v,i)=>({v,i})).sort((a,b)=>a.v-b.v),n=values.length,ranks=new Array(n);let i=0,tie=0;while(i<n){let j=i;while(j+1<n&&idx[j+1].v===idx[i].v)j++;const r=(i+j+2)/2;for(let k=i;k<=j;k++)ranks[idx[k].i]=r;const t=j-i+1;if(t>1)tie+=t*t*t-t;i=j+1;}return{ranks,tieSum:tie};}
+function KAT_kruskal(data,categories){
+  const present=categories.filter(cat=>data.some(d=>d.category===cat)),N=data.length,R=KAT_ranks(data.map(d=>d.ngain));
+  const cells=present.map(cat=>{let sum=0,n=0;data.forEach((d,i)=>{if(d.category===cat){sum+=R.ranks[i];n++;}});return{cat,n,rankSum:sum,meanRank:sum/n};});
+  let H=12/(N*(N+1))*cells.reduce((s,c)=>s+c.rankSum*c.rankSum/c.n,0)-3*(N+1);
+  const C=1-R.tieSum/(N*N*N-N);if(C>0)H/=C;
+  const df=present.length-1;
+  return{H,df,p:chiSqP(H,df),N,tieSum:R.tieSum,cells,k:present.length};
+}
+function KAT_groupMW(data,groups){return mannWhitney(data.filter(d=>d.group===groups[0]).map(d=>d.ngain),data.filter(d=>d.group===groups[1]).map(d=>d.ngain));}
+function KAT_dunn(data,categories){
+  const kw=KAT_kruskal(data,categories),N=kw.N,sigmaBase=(N*(N+1)/12)-(kw.tieSum/(12*(N-1))),cells=kw.cells,pairs=[];
+  for(let i=0;i<cells.length;i++)for(let j=i+1;j<cells.length;j++)pairs.push([cells[i],cells[j]]);
+  const tests=pairs.map(([a,b])=>{const se=Math.sqrt(sigmaBase*(1/a.n+1/b.n)),z=se>0?(a.meanRank-b.meanRank)/se:0;return{a,b,z,p:2*(1-normCdf(Math.abs(z)))};});
+  const m=Math.max(1,tests.length),holm=KAT_holm(tests.map(t=>t.p)),rows=[],texts=[];
+  tests.forEach((x,k)=>{
+    const pB=Math.min(1,x.p*m),pH=holm[k],dec=pH<.05;
+    rows.push(`<tr><td class="lab">${x.a.cat} vs ${x.b.cat}</td><td>${f3(x.a.meanRank-x.b.meanRank)}</td><td>${f3(x.z)}</td><td>${sig(x.p)}</td><td>${sig(pB)}</td><td>${sig(pH)}</td><td>${dec?'Signifikan':'Tidak signifikan'}</td></tr>`);
+    texts.push(`${x.a.cat} vs ${x.b.cat}: ${dec?(x.a.meanRank>x.b.meanRank?'N-Gain '+x.a.cat+' lebih tinggi daripada '+x.b.cat:'N-Gain '+x.b.cat+' lebih tinggi daripada '+x.a.cat):'tidak ada perbedaan N-Gain yang signifikan'} (p Holm = ${sig(pH)}).`);
+  });
+  return block('Uji Lanjut (Post Hoc) Efek Kategori — Uji Dunn',tbl(`<tr><th>Perbandingan</th><th>Beda Mean Rank</th><th>Z</th><th>Sig.</th><th>Sig. Bonferroni</th><th>Sig. Holm</th><th>Keputusan</th></tr>${rows.join('')}`)+interp('Kategori signifikan (Kruskal–Wallis) ⇒ uji lanjut Dunn berbasis peringkat gabungan dengan koreksi Bonferroni &amp; Holm; keputusan berdasarkan p Holm &lt; .05.<br>'+texts.join('<br>')));
+}
+function KAT_simpleMW(data,groups,categories){
+  const present=categories.filter(cat=>data.some(d=>d.category===cat));
+  const cells=present.map(cat=>({cat,a:data.filter(d=>d.category===cat&&d.group===groups[0]).map(d=>d.ngain),b:data.filter(d=>d.category===cat&&d.group===groups[1]).map(d=>d.ngain)}));
+  const valid=cells.filter(c=>c.a.length>=1&&c.b.length>=1),m=Math.max(1,valid.length);
+  const tests=valid.map(c=>({cat:c.cat,nA:c.a.length,nB:c.b.length,mw:mannWhitney(c.a,c.b),diff:mean(c.a)-mean(c.b)}));
+  const holm=KAT_holm(tests.map(x=>x.mw.p)),rows=[],texts=[];
+  tests.forEach((x,k)=>{
+    const pB=Math.min(1,x.mw.p*m),pH=holm[k],dec=pH<.05;
+    rows.push(`<tr><td class="lab">${x.cat}</td><td>${x.nA}</td><td>${x.nB}</td><td>${f3(x.mw.U)}</td><td>${f3(x.mw.z)}</td><td>${sig(x.mw.p)}</td><td>${sig(pB)}</td><td>${sig(pH)}</td><td>${dec?'Signifikan':'Tidak signifikan'}</td></tr>`);
+    texts.push(`${x.cat}: ${dec?(x.diff>0?esc(groups[0])+' lebih efektif daripada '+esc(groups[1]):esc(groups[1])+' lebih efektif daripada '+esc(groups[0])):'tidak ada perbedaan efektivitas yang signifikan'} (p Holm = ${sig(pH)}).`);
+  });
+  cells.filter(c=>!(c.a.length>=1&&c.b.length>=1)).forEach(c=>{rows.push(`<tr><td class="lab">${c.cat}</td><td>${c.a.length}</td><td>${c.b.length}</td><td colspan="6">Data tidak cukup</td></tr>`);});
+  return block('Uji Lanjut (Simple Effect) per Kategori — Mann–Whitney U',tbl(`<tr><th>Kategori</th><th>N ${esc(groups[0])}</th><th>N ${esc(groups[1])}</th><th>U</th><th>Z</th><th>Sig.</th><th>Sig. Bonferroni</th><th>Sig. Holm</th><th>Keputusan</th></tr>${rows.join('')}`)+interp(`Simple effect nonparametrik (${esc(groups[0])} vs ${esc(groups[1])}) dalam tiap kategori menggunakan Mann–Whitney U dengan koreksi Bonferroni &amp; Holm; keputusan berdasarkan p Holm &lt; .05. Karena uji interaksi nonparametrik tidak baku, ketiga perbandingan dilaporkan langsung; pola perbedaan antar kategori mengindikasikan efektivitas kelompok dapat bergantung pada kategori kemampuan awal.<br>`+texts.join('<br>')));
+}
+function KAT_residuals(data,groups,categories,key){const res=[];categories.forEach(cat=>groups.forEach(g=>{const cell=data.filter(d=>d.category===cat&&d.group===g);if(!cell.length)return;const mu=mean(cell.map(d=>d[key]));cell.forEach(d=>res.push(d[key]-mu));}));return res;}
+function KAT_normality(data,groups,categories){
+  const rp=KAT_residuals(data,groups,categories,'post'),rg=KAT_residuals(data,groups,categories,'ngain');
+  const sp=rp.length>=3?shapiroWilk(rp):{W:NaN,p:NaN},sg=rg.length>=3?shapiroWilk(rg):{W:NaN,p:NaN};
+  const postNN=Number.isFinite(sp.p)&&sp.p<.05,ngainNN=Number.isFinite(sg.p)&&sg.p<.05;
+  return{post:sp,ngain:sg,n:rp.length,nonparametric:postNN&&ngainNN};
+}
+function KAT_assumptionNote(norm){
+  const dec=s=>Number.isFinite(s.p)?(s.p<.05?'Tidak normal':'Normal'):'—';
+  const path=norm.nonparametric
+    ?'Residual Posttest <b>dan</b> N-Gain sama-sama tidak normal (Sig. &lt; .05) ⇒ digunakan <b>jalur nonparametrik</b>: Kruskal–Wallis (efek kategori), Mann–Whitney U (efek kelompok), serta uji Dunn / Mann–Whitney U berpasangan untuk uji lanjut.'
+    :'Asumsi normalitas tidak dilanggar secara penuh (minimal satu dari Posttest atau N-Gain normal) ⇒ digunakan <b>jalur parametrik</b>: ANOVA dua jalur beserta uji lanjut parametrik.';
+  return cap('Uji Asumsi Normalitas (Shapiro–Wilk atas residual model)')+tbl(`<tr><th>Residual</th><th>W</th><th>Sig.</th><th>Keputusan</th></tr>
+    <tr><td class="lab">Posttest</td><td>${f3(norm.post.W)}</td><td>${sig(norm.post.p)}</td><td>${dec(norm.post)}</td></tr>
+    <tr><td class="lab">N-Gain</td><td>${f3(norm.ngain.W)}</td><td>${sig(norm.ngain.p)}</td><td>${dec(norm.ngain)}</td></tr>`)+interp(path);
+}
+function KAT_npTables(kw,gm,groups){
+  const kwRows=kw.cells.map(c=>`<tr><td class="lab">${c.cat}</td><td>${c.n}</td><td>${f2(c.meanRank)}</td><td>${f2(c.rankSum)}</td></tr>`).join('');
+  const kwTbl=cap('Peringkat — Kruskal–Wallis (Efek Kategori)')+tbl(`<tr><th>Kategori</th><th>N</th><th>Mean Rank</th><th>Sum of Ranks</th></tr>${kwRows}`)+
+    tbl(`<tr><th>Statistik (N-Gain)</th><th>Nilai</th></tr><tr><td class="lab">Chi-Square (H)</td><td>${f3(kw.H)}</td></tr><tr><td class="lab">df</td><td>${kw.df}</td></tr><tr><td class="lab">Asymp. Sig.</td><td>${sig(kw.p)}</td></tr>`)+
+    '<div class="spss-foot">Uji Kruskal–Wallis pada N-Gain menurut kategori kemampuan awal (terkoreksi ikatan).</div>';
+  const mwTbl=cap('Peringkat — Mann–Whitney U (Efek Kelompok)')+tbl(`<tr><th>Kelompok</th><th>N</th><th>Mean Rank</th><th>Sum of Ranks</th></tr>
+    <tr><td class="lab">${esc(groups[0])}</td><td>${gm.n1}</td><td>${f2(gm.mr1)}</td><td>${f2(gm.R1)}</td></tr>
+    <tr><td class="lab">${esc(groups[1])}</td><td>${gm.n2}</td><td>${f2(gm.mr2)}</td><td>${f2(gm.R2)}</td></tr>`)+
+    tbl(`<tr><th>Statistik (N-Gain)</th><th>Nilai</th></tr><tr><td class="lab">Mann–Whitney U</td><td>${f3(gm.U)}</td></tr><tr><td class="lab">Wilcoxon W</td><td>${f3(gm.W)}</td></tr><tr><td class="lab">Z</td><td>${f3(gm.z)}</td></tr><tr><td class="lab">Asymp. Sig. (2-tailed)</td><td>${sig(gm.p)}</td></tr>`);
+  return kwTbl+mwTbl;
+}
+function KAT_npInterpretation(kw,gm,groups){
+  return interp(`<b>Efek kelompok (Mann–Whitney U):</b> ${gm.p<.05?'terdapat perbedaan N-Gain yang signifikan antara '+esc(groups[0])+' dan '+esc(groups[1]):'tidak terdapat perbedaan N-Gain yang signifikan antar kelompok'} (U = ${f3(gm.U)}, Z = ${f3(gm.z)}, Sig. = ${sig(gm.p)}).<br>
+    <b>Efek kategori (Kruskal–Wallis):</b> ${kw.p<.05?'N-Gain berbeda signifikan menurut kategori kemampuan awal':'N-Gain tidak berbeda signifikan menurut kategori kemampuan awal'} (H = ${f3(kw.H)}, df = ${kw.df}, Sig. = ${sig(kw.p)}).`);
 }
 function KAT_run(){
   const out=document.getElementById('katOut');
@@ -750,8 +870,23 @@ function KAT_run(){
     <b>Efek kategori:</b> ${catEffect.p<.05?'N-Gain berbeda signifikan menurut kategori kemampuan awal':'N-Gain tidak berbeda signifikan menurut kategori kemampuan awal'} (F = ${f3(catEffect.F)}, Sig. = ${sig(catEffect.p)}).<br>
     <b>Interaksi kelompok × kategori:</b> ${interaction.p<.05?'signifikan; efektivitas kelompok bergantung pada kategori kemampuan awal':'tidak signifikan; perbedaan kelompok relatif konsisten pada ketiga kategori'} (F = ${f3(interaction.F)}, Sig. = ${sig(interaction.p)}).<br>
     Secara keseluruhan, mean N-Gain ${esc(groups[0])} = ${f3(groupMeans[0])} dan ${esc(groups[1])} = ${f3(groupMeans[1])}${groupEffect.p<.05?`, sehingga <b>${esc(groupMeans[0]>groupMeans[1]?groups[0]:groups[1])}</b> lebih efektif secara signifikan.`:'.'}`);
-  let html=block('Analisis Kategori Kemampuan Awal',boundaryNotice+KAT_descriptive(data,groups,categories)+KAT_anovaTable(anova)+interpretation);
-  if(interaction.p<.05)html+=KAT_followups(data,groups,categories);
+  const norm=KAT_normality(data,groups,categories);
+  let html;
+  if(norm.nonparametric){
+    const kw=KAT_kruskal(data,categories),gm=KAT_groupMW(data,groups);
+    html=block('Analisis Kategori Kemampuan Awal',boundaryNotice+KAT_descriptive(data,groups,categories)+KAT_assumptionNote(norm)+KAT_npTables(kw,gm,groups)+KAT_npInterpretation(kw,gm,groups));
+    if(gm.p<.05)html+=block('Uji Lanjut (Post Hoc) Efek Kelompok',interp('Efek Kelompok signifikan (Mann–Whitney U). Karena faktor Kelompok hanya memiliki dua taraf ('+esc(groups[0])+' dan '+esc(groups[1])+'), uji Mann–Whitney U sudah merupakan perbandingan langsung antar kedua kelompok, sehingga tidak diperlukan uji post hoc lanjutan.'));
+    if(kw.p<.05&&kw.k>=3)html+=KAT_dunn(data,categories);
+    html+=KAT_simpleMW(data,groups,categories);
+    if(gm.p>=.05&&kw.p>=.05)html+=block('Uji Lanjut (Post Hoc)',interp('Efek Kelompok (Mann–Whitney U) maupun efek Kategori (Kruskal–Wallis) tidak signifikan pada taraf .05, sehingga tidak dilakukan uji lanjut antar kategori; uji simple effect per kategori tetap ditampilkan sebagai pelengkap.'));
+  }else{
+    html=block('Analisis Kategori Kemampuan Awal',boundaryNotice+KAT_descriptive(data,groups,categories)+KAT_assumptionNote(norm)+KAT_anovaTable(anova)+interpretation);
+    const catLevels=categories.filter(c=>data.some(d=>d.category===c)).length;
+    if(catEffect.p<.05&&catLevels>=3)html+=KAT_categoryPosthoc(data,categories,anova.error.ms,anova.error.df,interaction.p<.05);
+    if(interaction.p<.05)html+=KAT_followups(data,groups,categories,anova.error.ms,anova.error.df);
+    if(groupEffect.p<.05)html+=block('Uji Lanjut (Post Hoc) Efek Kelompok',interp('Efek Kelompok signifikan. Karena faktor Kelompok hanya memiliki dua taraf ('+esc(groups[0])+' dan '+esc(groups[1])+'), uji-F (setara uji-t/Mann–Whitney untuk dua kelompok) sudah merupakan perbandingan langsung antar kedua kelompok, sehingga tidak diperlukan uji post hoc lanjutan.'));
+    if(groupEffect.p>=.05&&catEffect.p>=.05&&interaction.p>=.05)html+=block('Uji Lanjut (Post Hoc)',interp('Tidak ada efek yang signifikan pada taraf .05, sehingga tidak dilakukan uji post hoc apa pun.'));
+  }
   out.innerHTML=html;
   document.getElementById('downloadArea').style.display='flex';
   out.scrollIntoView({behavior:'smooth',block:'start'});
