@@ -113,7 +113,7 @@ footer{margin-top:40px;padding-top:18px;border-top:1px solid var(--line);font-si
   <div id="mapArea" style="display:none">
     <div class="maps" id="maps"></div>
     <div class="btnrow"><button class="btn" id="runBtn">Jalankan analisis</button></div>
-    <div class="notice info">Nilai bulat yang seluruhnya berada pada rentang 1-4 atau 1-5 akan ditransformasi ke MSI secara otomatis sebelum pengujian. Skor selain rentang Likert dianalisis tanpa MSI.</div>
+    <div class="notice info">Nilai bulat yang seluruhnya berada pada rentang 1&ndash;4 atau 1&ndash;5 ditransformasi ke MSI secara otomatis sebelum pengujian; skor di luar rentang itu dianalisis tanpa MSI. Deteksi ini hanya berdasarkan rentang nilai dan <b>tidak dapat membedakan data ordinal dari data interval</b> — bila skor Anda memang interval (mis. jumlah butir benar 1&ndash;5), hapus centang <b>Terapkan MSI otomatis</b> agar data tidak ditransformasi.</div>
   </div>
   <div id="msg"></div>
 </div>
@@ -140,7 +140,8 @@ footer{margin-top:40px;padding-top:18px;border-top:1px solid var(--line);font-si
 <div id="out"></div>
 
 <footer>
-  Semua uji divalidasi terhadap SciPy: Shapiro–Wilk, Kolmogorov–Smirnov (signifikansi Lilliefors, aproksimasi Dallal–Wilkinson), Levene (berbasis rata-rata, sesuai default SPSS), uji-t berpasangan, uji-t independen (varians sama / Welch), Wilcoxon signed-rank &amp; Mann–Whitney U (tanpa koreksi kontinuitas, seperti SPSS), Cohen's d / Hedges' g, dan N-Gain (Hake). Perhitungan berjalan di peramban Anda.<br><br>
+  Semua uji divalidasi terhadap SciPy: Shapiro–Wilk, Kolmogorov–Smirnov (signifikansi Lilliefors, aproksimasi Dallal–Wilkinson), Levene (berbasis rata-rata, sesuai default SPSS), uji-t berpasangan, uji-t independen (varians sama / Welch), Wilcoxon signed-rank &amp; Mann–Whitney U (tanpa koreksi kontinuitas, seperti SPSS), Cohen's d / Hedges' g, dan N-Gain. Perhitungan berjalan di peramban Anda.<br><br>
+  <b>N-Gain:</b> peningkatan memakai ⟨g⟩ Hake (1998) = (Post − Pre)/(Maks − Pre); penurunan memakai normalized change Marx &amp; Cummings (2007) = (Post − Pre)/Pre agar nilai terbatas pada [−1, +1]. Rumus yang sama dipakai pada mode kuasi-eksperimen maupun analisis kategori. Normalitas N-Gain diuji langsung atas N-Gain, bukan disimpulkan dari normalitas Pretest/Posttest, karena N-Gain adalah rasio dengan penyebut acak sehingga sebarannya tidak mengikuti sebaran komponennya.<br><br>
   <b>Catatan:</b> nilai Sig. ".000" berarti p &lt; .0005 (mengikuti pembulatan SPSS klasik). Desain satu kelompok tanpa kontrol membatasi klaim kausal; pada kuasi-eksperimen non-acak, perbedaan awal perlu ditafsirkan hati-hati.
 </footer>
 </div>
@@ -168,7 +169,30 @@ function wilcoxonSPSS(pre,post){const diffs=post.map((v,i)=>v-pre[i]).filter(d=>
 function independentT(g1,g2){const n1=g1.length,n2=g2.length,m1=mean(g1),m2=mean(g2),v1=variance(g1),v2=variance(g2);const sp2=((n1-1)*v1+(n2-1)*v2)/(n1+n2-2),seP=Math.sqrt(sp2*(1/n1+1/n2)),tP=(m1-m2)/seP,dfP=n1+n2-2,pP=tTwoTailP(tP,dfP),tcP=critT(.975,dfP);const seW=Math.sqrt(v1/n1+v2/n2),tW=(m1-m2)/seW,dfW=Math.pow(v1/n1+v2/n2,2)/(Math.pow(v1/n1,2)/(n1-1)+Math.pow(v2/n2,2)/(n2-1)),pW=tTwoTailP(tW,dfW),tcW=critT(.975,dfW);const md=m1-m2;const sp=Math.sqrt(sp2),dCoh=md/sp,J=1-3/(4*(n1+n2-2)-1);return{n1,n2,m1,m2,sd1:Math.sqrt(v1),sd2:Math.sqrt(v2),meanDiff:md,d:dCoh,g:dCoh*J,pooled:{t:tP,df:dfP,p:pP,se:seP,ci:[md-tcP*seP,md+tcP*seP]},welch:{t:tW,df:dfW,p:pW,se:seW,ci:[md-tcW*seW,md+tcW*seW]}};}
 function levene(groups){const k=groups.length,N=groups.reduce((s,g)=>s+g.length,0);const Z=groups.map(g=>{const m=mean(g);return g.map(x=>Math.abs(x-m));});const zbarG=Z.map(mean),zbar=mean([].concat(...Z));let num=0;Z.forEach((z,j)=>num+=z.length*(zbarG[j]-zbar)**2);let den=0;Z.forEach((z,j)=>z.forEach(v=>den+=(v-zbarG[j])**2));const W=((N-k)/(k-1))*(num/den),df1=k-1,df2=N-k;return{W,df1,df2,p:fP(W,df1,df2)};}
 function mannWhitney(g1,g2){const n1=g1.length,n2=g2.length,N=n1+n2,all=g1.map(v=>({v,g:1})).concat(g2.map(v=>({v,g:2})));all.sort((a,b)=>a.v-b.v);const ranks=new Array(N);let i=0;const counts={};while(i<N){let j=i;while(j+1<N&&all[j+1].v===all[i].v)j++;const r=(i+j+2)/2;for(let k=i;k<=j;k++)ranks[k]=r;counts[all[i].v]=j-i+1;i=j+1;}let R1=0;all.forEach((o,idx)=>{if(o.g===1)R1+=ranks[idx];});const R2=N*(N+1)/2-R1,U1=R1-n1*(n1+1)/2,U2=R2-n2*(n2+1)/2,U=Math.min(U1,U2),Wst=Math.min(R1,R2),muU=n1*n2/2;let tie=0;Object.values(counts).forEach(c=>{if(c>1)tie+=c*c*c-c;});const sig=Math.sqrt((n1*n2/12)*((N+1)-tie/(N*(N-1))));const z=(U-muU)/sig,p=2*(1-normCdf(Math.abs(z)));return{U,W:Wst,z,p,n1,n2,R1,R2,mr1:R1/n1,mr2:R2/n2};}
-function nGainIndiv(pre,post,mx){return post.map((v,i)=>{const num=v-pre[i];if(v>=pre[i]){return mx-pre[i]===0?NaN:num/(mx-pre[i]);}return pre[i]===0?NaN:num/pre[i];}).filter(g=>!isNaN(g));}
+/* N-Gain individual — SATU definisi dipakai di seluruh program (Mode 2 dan bagian Kategori).
+   Peningkatan  : g = (post − pre) / (maks − pre)          [Hake 1998]
+   Penurunan    : c = (post − pre) / pre                     [normalized change, Marx & Cummings 2007]
+   Cabang penurunan menjaga nilai tetap terbatas pada [−1, +1]; Hake murni tidak terbatas ke bawah
+   (mis. pre = 99, post = 0 menghasilkan −99) sehingga satu kasus dapat merusak mean, SD, dan normalitas. */
+function nGainIndividual(pre,post,mx){
+  if(post>=pre)return mx===pre?NaN:(post-pre)/(mx-pre);
+  return pre===0?NaN:(post-pre)/pre;
+}
+function nGainArray(pre,post,mx){return pre.map((p,i)=>nGainIndividual(p,post[i],mx)).filter(Number.isFinite);}
+/* Validasi rentang skor terhadap Skor Maksimum: nilai di luar [0, maks] membuat penyebut N-Gain
+   negatif atau menghasilkan g > 1, sehingga hasilnya tidak bermakna. */
+function rangeCheck(pre,post,mx){
+  const all=pre.concat(post).filter(Number.isFinite);
+  return{over:all.filter(v=>v>mx).length,neg:all.filter(v=>v<0).length,max:all.length?Math.max(...all):NaN};
+}
+function rangeError(chk,mx){
+  const parts=[];
+  if(chk.over)parts.push(`<b>${chk.over}</b> nilai melebihi Skor Maksimum (nilai tertinggi pada data = ${f2(chk.max)})`);
+  if(chk.neg)parts.push(`<b>${chk.neg}</b> nilai negatif`);
+  return `<div class="notice err"><b>N-Gain tidak dihitung.</b> Ditemukan ${parts.join(' dan ')}, sedangkan Skor Maksimum disetel ${f2(mx)}.
+    Skor di luar rentang [0, Skor Maksimum] membuat penyebut N-Gain negatif atau menghasilkan nilai &gt; 1, sehingga hasilnya tidak bermakna.
+    Periksa kembali isian <b>Skor maksimum</b> atau data Anda. Uji beda di atas tidak terpengaruh.</div>`;
+}
 function nGainClass(pre,post,mx){const mpre=mean(pre),mpost=mean(post);let g=(mx-mpre===0)?NaN:(mpost-mpre)/(mx-mpre);let c=isNaN(g)?'—':g>=.7?'Tinggi':g>=.3?'Sedang':'Rendah';return{g,cat:c};}
 
 /* ================= FORMAT HELPERS ================= */
@@ -208,7 +232,8 @@ function buildMaps(){
     maps.innerHTML=`
      <label class="fld">Kolom Pretest<select id="preCol">${opts()}</select></label>
      <label class="fld">Kolom Posttest<select id="postCol">${opts()}</select></label>
-     <label class="fld">Skor maksimum<input id="maxScore" type="number" step="any" value="100"></label>`;
+     <label class="fld">Skor maksimum<input id="maxScore" type="number" step="any" value="100"></label>
+     <label class="fld" style="flex-direction:row;align-items:center;gap:7px;align-self:flex-end;padding-bottom:9px"><input type="checkbox" id="msiAuto" checked> Terapkan MSI otomatis bila data Likert</label>`;
     if(COLS.length>1)maps.querySelector('#postCol').selectedIndex=1;
   } else {
     const grpIndex=autoCol(/kelompok|group|kelas|grup/i,0);
@@ -236,7 +261,8 @@ function buildMaps(){
        <b>Pretest</b> = ${esc(COLS[preIndex]?.name||'')},
        <b>Posttest</b> = ${esc(COLS[postIndex]?.name||'')}.
      </div>
-     <label class="fld">Skor maksimum<input id="maxScore" type="number" step="any" value="100"></label>`;
+     <label class="fld">Skor maksimum<input id="maxScore" type="number" step="any" value="100"></label>
+     <label class="fld" style="flex-direction:row;align-items:center;gap:7px;align-self:flex-end;padding-bottom:9px"><input type="checkbox" id="msiAuto" checked> Terapkan MSI otomatis bila data Likert</label>`;
   }
 }
 function colNum(i){return COLS[i].raw.map(num);}
@@ -335,8 +361,8 @@ function runLikertPosttestOnlyQuasi(){
   const swA=shapiroWilk(a),swB=shapiroWilk(b),ksA=ksLilliefors(a),ksB=ksLilliefors(b);
   const normal=swA.p>=.05&&swB.p>=.05;
   let testHtml=tNormality([
-    {label:`Total_MSI_Posttest Â· ${usedGroups[0]}`,sw:swA,ks:ksA},
-    {label:`Total_MSI_Posttest Â· ${usedGroups[1]}`,sw:swB,ks:ksB}
+    {label:`Total_MSI_Posttest · ${usedGroups[0]}`,sw:swA,ks:ksA},
+    {label:`Total_MSI_Posttest · ${usedGroups[1]}`,sw:swB,ks:ksB}
   ]);
   if(normal){
     const lev=levene([a,b]),it=independentT(a,b),homog=lev.p>=.05,row=homog?it.pooled:it.welch;
@@ -387,7 +413,9 @@ function MSI_detectScale(pre,post){
   if(unique.length<2)return null;
   return values.some(v=>v===5)?5:4;
 }
+function msiEnabled(){const el=document.getElementById('msiAuto');return !el||el.checked;}
 function MSI_prepare(pre,post){
+  if(!msiEnabled())return{applied:false,pre:[...pre],post:[...post],offByUser:true};
   const scaleMax=MSI_detectScale(pre,post);
   if(!scaleMax)return{applied:false,pre:[...pre],post:[...post]};
   const conversion=MSI_transform(pre.concat(post),scaleMax);
@@ -590,7 +618,7 @@ function runMode1(){
   let html=MSI_output(msi)+block( 'Analisis Satu Kelompok — ' + esc(labels[0]) + ' vs ' + esc(labels[1]),
     tPairedStats(pre,post,labels)+
     tNormality([{label:`${labels[1]} − ${labels[0]}`,sw,ks}])+
-    interp(`Uji normalitas selisih: Shapiro–Wilk W = ${f3(sw.W)}, Sig. = ${sig(sw.p)} → data ${normal?'<b>berdistribusi normal</b> (Sig. &gt; .05) ⇒ memakai <b>uji-t berpasangan</b>.':'<b>tidak normal</b> (Sig. ≤ .05) ⇒ memakai <b>Wilcoxon signed-rank</b>.'}`));
+    interp(`Uji normalitas selisih: Shapiro–Wilk W = ${f3(sw.W)}, Sig. = ${sig(sw.p)} → data ${normal?'<b>berdistribusi normal</b> (Sig. &ge; .05) ⇒ memakai <b>uji-t berpasangan</b>.':'<b>tidak normal</b> (Sig. &lt; .05) ⇒ memakai <b>Wilcoxon signed-rank</b>.'}`));
 
   if(normal){
     html+=block('Uji Beda — Uji-t Berpasangan',
@@ -605,11 +633,19 @@ function runMode1(){
       buildAdvice([{label:`Selisih (${labels[1]} − ${labels[0]})`,arr:diff}]));
   }
   if(!msi.applied){
-    const ng=nGainClass(pre,post,mx);
-    html+=block('N-Gain (Hake)',
-      cap('N-Gain')+tbl(`<tr><th class="corner"></th><th>N</th><th>Mean Pretest</th><th>Mean Posttest</th><th>&lt;g&gt;</th><th>Kategori</th></tr>
-        <tr><th class="lab">${esc(labels[1])}</th><td class="num">${pre.length}</td><td class="num">${f2(mean(pre))}</td><td class="num">${f2(mean(post))}</td><td class="num">${f3(ng.g)}</td><td class="num">${ng.cat}</td></tr>`)+
-      interp(`N-Gain ternormalisasi ⟨g⟩ = ${f3(ng.g)} ⇒ kategori peningkatan <b>${ng.cat}</b>.`));
+    const rc1=rangeCheck(pre,post,mx);
+    if(rc1.over||rc1.neg){html+=block('N-Gain',rangeError(rc1,mx));}
+    else{
+      const ng=nGainClass(pre,post,mx);
+      const ngi=nGainArray(pre,post,mx);
+      const mi=ngi.length?mean(ngi):NaN;
+      const catOf=g=>!Number.isFinite(g)?'—':g>=.7?'Tinggi':g>=.3?'Sedang':'Rendah';
+      html+=block('N-Gain',
+        cap('N-Gain')+tbl(`<tr><th class="corner"></th><th>N</th><th>Mean Pretest</th><th>Mean Posttest</th><th>Mean N-Gain individu</th><th>Std. Deviation</th><th>&lt;g&gt; kelas</th><th>Kategori &lt;g&gt; kelas</th></tr>
+          <tr><th class="lab">${esc(labels[1])} − ${esc(labels[0])}</th><td class="num">${ngi.length}</td><td class="num">${f2(mean(pre))}</td><td class="num">${f2(mean(post))}</td><td class="num">${f3(mi)}</td><td class="num">${ngi.length>1?f3(sd(ngi)):''}</td><td class="num">${f3(ng.g)}</td><td class="num">${ng.cat}</td></tr>`)+
+        `<div class="spss-foot"><b>⟨g⟩ kelas</b> = (Mean Post − Mean Pre)/(Maks − Mean Pre) sesuai definisi asli Hake (1998) yang berbasis rata-rata kelas. <b>Mean N-Gain individu</b> = rata-rata ⟨g⟩ tiap siswa; keduanya lazim berbeda karena rata-rata suatu rasio tidak sama dengan rasio dari rata-rata. Penurunan skor memakai (Post − Pre)/Pre [Marx &amp; Cummings, 2007].${pre.length-ngi.length?` <b>${pre.length-ngi.length}</b> kasus tanpa N-Gain terdefinisi dikeluarkan dari kolom individu.`:''}</div>`+
+        interp(`⟨g⟩ kelas = ${f3(ng.g)} ⇒ kategori peningkatan <b>${ng.cat}</b>. Rata-rata N-Gain individu = ${f3(mi)} ⇒ kategori <b>${catOf(mi)}</b>. Bila keduanya berbeda kategori, laporkan yang sesuai unit analisis skripsi Anda dan sebutkan rumusnya secara eksplisit.`));
+    }
   }
   out.innerHTML=html;finishOutput();
 }
@@ -623,8 +659,12 @@ function getTwoGroups(){
   const levels=[...new Set(g.map(v=>String(v).trim()).filter(v=>v!==''))];
   if(levels.length<2)return{err:'Kolom kelompok harus punya minimal 2 kategori.'};
   E.name=levels[0];K.name=levels[1];
-  for(let i=0;i<g.length;i++){const lab=String(g[i]).trim();if(isNaN(pr[i])||isNaN(po[i]))continue;if(lab===levels[0]){E.pre.push(pr[i]);E.post.push(po[i]);}else if(lab===levels[1]){K.pre.push(pr[i]);K.post.push(po[i]);}}
-  return{E,K,mx};
+  let ignored=0;
+  for(let i=0;i<g.length;i++){const lab=String(g[i]).trim();if(!lab)continue;if(isNaN(pr[i])||isNaN(po[i]))continue;
+    if(lab===levels[0]){E.pre.push(pr[i]);E.post.push(po[i]);}
+    else if(lab===levels[1]){K.pre.push(pr[i]);K.post.push(po[i]);}
+    else ignored++;}
+  return{E,K,mx,extraLevels:levels.slice(2),ignored};
 }
 function compareBlock(title,arrE,arrK,names,varName){
   const swE=shapiroWilk(arrE),swK=shapiroWilk(arrK),ksE=ksLilliefors(arrE),ksK=ksLilliefors(arrK);
@@ -654,6 +694,12 @@ function runMode2(){
   const{E,K,mx}=g;
   if(E.pre.length<3||K.pre.length<3){out.innerHTML=block('Galat','<div class="notice err">Tiap kelompok perlu minimal 3 kasus lengkap.</div>');return;}
   const names=[E.name,K.name];
+  let levelNotice='';
+  if(g.extraLevels&&g.extraLevels.length){
+    levelNotice=`<div class="notice warn"><b>Kolom Kelompok memiliki ${g.extraLevels.length+2} kategori</b>, sedangkan desain kuasi-eksperimen membandingkan dua kelompok.
+      Program memakai <b>${esc(E.name)}</b> dan <b>${esc(K.name)}</b> (dua kategori pertama yang muncul); <b>${g.ignored}</b> baris berkategori ${g.extraLevels.map(esc).map(v=>'<b>'+v+'</b>').join(', ')} tidak dianalisis.
+      Perbandingan label bersifat peka huruf besar/kecil dan spasi, sehingga selisih penulisan (mis. “Kontrol” dan “kontrol”) terbaca sebagai kategori berbeda — periksa kembali data Anda bila kategori tambahan ini tidak disengaja.</div>`;
+  }
   const eLength=E.pre.length;
   const msi=MSI_prepare(E.pre.concat(K.pre),E.post.concat(K.post));
   if(msi.applied){
@@ -661,7 +707,7 @@ function runMode2(){
     E.post=msi.post.slice(0,eLength);K.post=msi.post.slice(eLength);
   }
   const msiGroups=Array(eLength).fill(E.name).concat(Array(K.pre.length).fill(K.name));
-  out.innerHTML=MSI_output(msi,msiGroups);
+  out.innerHTML=levelNotice+MSI_output(msi,msiGroups);
 
   // Group statistics
   const gs=[{var:'Pretest',grp:E.name,n:E.pre.length,mean:mean(E.pre),sd:sd(E.pre)},
@@ -680,32 +726,75 @@ function runMode2(){
   out.innerHTML+=compareBlock('Uji Hasil Akhir (Posttest)',E.post,K.post,names,'Posttest');
 
   if(!msi.applied){
-    // N-Gain comparison
-    const ngE=nGainIndiv(E.pre,E.post,mx),ngK=nGainIndiv(K.pre,K.post,mx);
-    const clE=nGainClass(E.pre,E.post,mx),clK=nGainClass(K.pre,K.post,mx);
-    let ngHtml=cap('Deskriptif N-Gain per Kelompok')+tbl(`<tr><th class="corner"></th><th>N</th><th>Mean &lt;g&gt;</th><th>Kategori</th></tr>
-      <tr><th class="lab">${esc(E.name)}</th><td class="num">${ngE.length}</td><td class="num">${f3(clE.g)}</td><td class="num">${clE.cat}</td></tr>
-      <tr><th class="lab">${esc(K.name)}</th><td class="num">${ngK.length}</td><td class="num">${f3(clK.g)}</td><td class="num">${clK.cat}</td></tr>`);
+    // N-Gain antar kelompok: normalitas N-Gain diuji secara mandiri, tidak diwarisi dari Pretest/Posttest.
+    const rc=rangeCheck(E.pre.concat(K.pre),E.post.concat(K.post),mx);
+    if(rc.over||rc.neg){out.innerHTML+=block('Perbandingan N-Gain antar Kelompok',rangeError(rc,mx));}
+    else{
+    const ngE=nGainArray(E.pre,E.post,mx),ngK=nGainArray(K.pre,K.post,mx);
+    const meanNGE=ngE.length?mean(ngE):NaN,meanNGK=ngK.length?mean(ngK):NaN;
+    const gainCategory=g=>!Number.isFinite(g)?'—':g>=.7?'Tinggi':g>=.3?'Sedang':'Rendah';
+    const invalidE=E.pre.length-ngE.length,invalidK=K.pre.length-ngK.length;
+
+    let ngHtml=cap('Deskriptif N-Gain Individual per Kelompok')+tbl(`<tr><th class="corner"></th><th>N</th><th>Mean N-Gain</th><th>Std. Deviation</th><th>Kategori</th></tr>
+      <tr><th class="lab">${esc(E.name)}</th><td class="num">${ngE.length}</td><td class="num">${f3(meanNGE)}</td><td class="num">${ngE.length>1?f3(sd(ngE)):''}</td><td class="num">${gainCategory(meanNGE)}</td></tr>
+      <tr><th class="lab">${esc(K.name)}</th><td class="num">${ngK.length}</td><td class="num">${f3(meanNGK)}</td><td class="num">${ngK.length>1?f3(sd(ngK)):''}</td><td class="num">${gainCategory(meanNGK)}</td></tr>`)+
+      `<div class="spss-foot">N-Gain dihitung per individu: (Post − Pre)/(Maks − Pre) untuk peningkatan [Hake, 1998]; (Post − Pre)/Pre untuk penurunan [normalized change, Marx &amp; Cummings, 2007] agar nilai tetap terbatas pada [−1, +1]. Kategori mengikuti ambang Hake atas rata-rata N-Gain individu: &ge;.70 Tinggi, &ge;.30 Sedang, &lt;.30 Rendah.</div>`;
+
+    if(invalidE||invalidK){
+      ngHtml+=`<div class="notice warn">Sebanyak <b>${invalidE}</b> kasus ${esc(E.name)} dan <b>${invalidK}</b> kasus ${esc(K.name)} tidak memiliki N-Gain terdefinisi (skor pretest sama dengan Skor Maksimum sehingga tidak ada ruang peningkatan, atau pretest = 0 pada kasus penurunan); kasus tersebut tidak dimasukkan dalam perbandingan N-Gain.</div>`;
+    }
+
     if(ngE.length>=3&&ngK.length>=3){
-      const swN=shapiroWilk(ngE).p>=.05&&shapiroWilk(ngK).p>=.05;
-      const levN=levene([ngE,ngK]),itN=independentT(ngE,ngK),mwN=mannWhitney(ngE,ngK);
-      if(swN){const homog=levN.p>=.05,row=homog?itN.pooled:itN.welch;
-        ngHtml+=tIndepTest(itN,levN,'N-Gain')+tEffect(itN.d,itN.g,'N-Gain')+interp(`Perbandingan N-Gain: t = ${f3(row.t)}, df = ${f2(row.df)}, Sig. = ${sig(row.p)} ⇒ ${tag(row.p)}. ${row.p<.05?'Peningkatan kelompok '+(clE.g>clK.g?E.name:K.name)+' lebih tinggi secara signifikan.':'Tidak ada beda peningkatan yang signifikan antar kelompok.'} Cohen's d = ${f3(itN.d)} (${dLabel(itN.d)}).`);
+      const swNE=shapiroWilk(ngE),swNK=shapiroWilk(ngK);
+      const ksNE=ksLilliefors(ngE),ksNK=ksLilliefors(ngK);
+      const normalityValid=Number.isFinite(swNE.p)&&Number.isFinite(swNK.p);
+      const normal=normalityValid&&swNE.p>=.05&&swNK.p>=.05;
+
+      ngHtml+=tNormality([
+        {label:`N-Gain · ${E.name}`,sw:swNE,ks:ksNE},
+        {label:`N-Gain · ${K.name}`,sw:swNK,ks:ksNK}
+      ]);
+
+      if(normal){
+        const levN=levene([ngE,ngK]),itN=independentT(ngE,ngK);
+        const homog=levN.p>=.05,row=homog?itN.pooled:itN.welch;
+        const higher=meanNGE===meanNGK?'':(meanNGE>meanNGK?E.name:K.name);
+        ngHtml+=interp(`Normalitas N-Gain (Shapiro–Wilk): ${esc(E.name)} Sig. = ${sig(swNE.p)} dan ${esc(K.name)} Sig. = ${sig(swNK.p)}. Kedua kelompok berdistribusi normal, sehingga dilanjutkan dengan uji homogenitas Levene.`)+
+          tIndepTest(itN,levN,'N-Gain')+
+          tEffect(itN.d,itN.g,'N-Gain')+
+          interp(`Levene Sig. = ${sig(levN.p)} ⇒ varians ${homog?'<b>homogen</b>, sehingga digunakan <b>independent samples t-test</b> pada baris <i>equal variances assumed</i>.':'<b>tidak homogen</b>, sehingga digunakan <b>Welch t-test</b> pada baris <i>equal variances not assumed</i>.'} Hasil: t = ${f3(row.t)}, df = ${f2(row.df)}, Sig. = ${sig(row.p)} ⇒ ${tag(row.p)}. ${row.p<.05?(higher?'Rata-rata N-Gain kelompok '+esc(higher)+' lebih tinggi secara signifikan.':'Terdapat perbedaan N-Gain yang signifikan antar kelompok.'):'Tidak terdapat perbedaan N-Gain yang signifikan antar kelompok.'} Cohen's d = ${f3(itN.d)} (${dLabel(itN.d)}).`);
       } else {
-        const rNG=rZeff(mwN.z,mwN.n1+mwN.n2);
-        ngHtml+=tMannWhitney(mwN,names,'N-Gain')+tEffectNonpar(rNG,'N-Gain',`N = N₁ + N₂ = ${mwN.n1+mwN.n2}`)+interp(`Perbandingan N-Gain (non-parametrik): Mann–Whitney U = ${f3(mwN.U)}, Z = ${f3(mwN.z)}, Asymp. Sig. = ${sig(mwN.p)} ⇒ ${tag(mwN.p)}. Ukuran efek r = ${f3(rNG)} ⇒ efek ${rLabel(rNG)}.`);
+        const mwN=mannWhitney(ngE,ngK),rNG=rZeff(mwN.z,mwN.n1+mwN.n2);
+        const reason=normalityValid
+          ?`Sedikitnya satu kelompok memiliki N-Gain tidak normal (${esc(E.name)} Sig. = ${sig(swNE.p)}; ${esc(K.name)} Sig. = ${sig(swNK.p)}), sehingga digunakan <b>Mann–Whitney U</b>. Homogenitas tidak menjadi dasar pemilihan uji pada jalur nonparametrik.`
+          :'Normalitas N-Gain tidak dapat ditentukan secara memadai karena salah satu distribusi tidak memiliki variasi yang cukup. Program menggunakan <b>Mann–Whitney U</b> sebagai jalur nonparametrik konservatif.';
+        ngHtml+=interp(reason)+
+          tMannWhitney(mwN,names,'N-Gain')+
+          tEffectNonpar(rNG,'N-Gain',`N = N₁ + N₂ = ${mwN.n1+mwN.n2}`)+
+          interp(`Perbandingan N-Gain: Mann–Whitney U = ${f3(mwN.U)}, Z = ${f3(mwN.z)}, Asymp. Sig. = ${sig(mwN.p)} ⇒ ${tag(mwN.p)}. Ukuran efek r = ${f3(rNG)} ⇒ efek ${rLabel(rNG)}.`)+
+          buildAdvice([{label:`N-Gain · ${E.name}`,arr:ngE},{label:`N-Gain · ${K.name}`,arr:ngK}]);
       }
+    } else {
+      ngHtml+='<div class="notice warn">Perbandingan inferensial N-Gain belum dapat dijalankan karena setiap kelompok memerlukan sedikitnya 3 nilai N-Gain yang valid.</div>';
     }
     out.innerHTML+=block('Perbandingan N-Gain antar Kelompok',ngHtml);
+    }
   }
 
-  // Within-group paired (supporting)
-  const ptE=pairedT(E.pre,E.post),ptK=pairedT(K.pre,K.post);
+  // Within-group paired (supporting) — jalur uji ditentukan normalitas SELISIH tiap kelompok
+  const supportOf=(name,pre,post)=>{
+    const d=post.map((v,i)=>v-pre[i]),sw=shapiroWilk(d),normal=Number.isFinite(sw.p)&&sw.p>=.05;
+    if(normal){const pt=pairedT(pre,post);return{name,sw,normal,test:'Uji-t berpasangan',stat:f3(pt.t),df:String(pt.df),p:pt.p,md:pt.meanDiff};}
+    const wx=wilcoxonSPSS(pre,post);return{name,sw,normal,test:'Wilcoxon signed-rank',stat:f3(wx.z),df:'',p:wx.p,md:mean(d)};
+  };
+  const sE=supportOf(E.name,E.pre,E.post),sK=supportOf(K.name,K.pre,K.post);
+  const supRow=(s,pre,post)=>`<tr><th class="lab">${esc(s.name)}</th><td class="num">${f2(mean(pre))}</td><td class="num">${f2(mean(post))}</td><td class="num">${f2(s.md)}</td><td class="num">${sig(s.sw.p)}</td><td class="lab">${s.test}</td><td class="num">${s.stat}</td><td class="num">${s.df}</td><td class="num">${sig(s.p)}</td></tr>`;
+  const verdict=s=>`${esc(s.name)} ${s.p<.05?'<b>berubah signifikan</b>':'tidak berubah signifikan'} dari pre ke post (${s.test}, Sig. = ${sig(s.p)})`;
   out.innerHTML+=block('Uji Berpasangan dalam Tiap Kelompok (Pendukung)',
-    tbl(`<tr><th class="corner"></th><th>Mean Pre</th><th>Mean Post</th><th>Mean Diff</th><th>t</th><th>df</th><th>Sig. (2-tailed)</th></tr>
-      <tr><th class="lab">${esc(E.name)}</th><td class="num">${f2(mean(E.pre))}</td><td class="num">${f2(mean(E.post))}</td><td class="num">${f2(ptE.meanDiff)}</td><td class="num">${f3(ptE.t)}</td><td class="num">${ptE.df}</td><td class="num">${sig(ptE.p)}</td></tr>
-      <tr><th class="lab">${esc(K.name)}</th><td class="num">${f2(mean(K.pre))}</td><td class="num">${f2(mean(K.post))}</td><td class="num">${f2(ptK.meanDiff)}</td><td class="num">${f3(ptK.t)}</td><td class="num">${ptK.df}</td><td class="num">${sig(ptK.p)}</td></tr>`)+
-    interp(`Kedua kelompok ${ptE.p<.05&&ptK.p<.05?'sama-sama berubah signifikan dari pre ke post':(ptE.p<.05?'hanya '+E.name+' yang berubah signifikan':ptK.p<.05?'hanya '+K.name+' yang berubah signifikan':'tidak berubah signifikan')}. Uji ini melengkapi, bukan menggantikan, perbandingan antar kelompok di atas.`));
+    tbl(`<tr><th class="corner"></th><th>Mean Pre</th><th>Mean Post</th><th>Mean Diff</th><th>Sig. Shapiro–Wilk (selisih)</th><th>Uji yang dipakai</th><th>t / Z</th><th>df</th><th>Sig. (2-tailed)</th></tr>
+      ${supRow(sE,E.pre,E.post)}${supRow(sK,K.pre,K.post)}`)+
+    `<div class="spss-foot">Uji dipilih per kelompok berdasarkan normalitas <b>selisih</b> (Post − Pre), konsisten dengan mode satu kelompok: Sig. &ge; .05 ⇒ uji-t berpasangan; Sig. &lt; .05 ⇒ Wilcoxon signed-rank. Homogenitas tidak relevan pada desain within-subject.</div>`+
+    interp(`${verdict(sE)}; ${verdict(sK)}. Uji ini melengkapi, bukan menggantikan, perbandingan antar kelompok di atas: kedua kelompok dapat sama-sama meningkat signifikan tanpa berarti perlakuan lebih unggul.`));
 
   finishOutput();
 }
@@ -760,10 +849,7 @@ function KAT_findUsableBounds(data,groups){
   }
   return best;
 }
-function KAT_nGain(pre,post,max){
-  if(post>=pre)return max===pre?NaN:(post-pre)/(max-pre);
-  return pre===0?NaN:(post-pre)/pre;
-}
+/* Memakai definisi N-Gain yang sama dengan Mode 2 (lihat nGainIndividual). */
 function KAT_solve(A,b){
   const n=A.length,M=A.map((r,i)=>r.slice().concat(b[i]));
   for(let c=0;c<n;c++){
@@ -969,10 +1055,13 @@ function KAT_run(){
   if(!(max>0&&b1<b2&&b2<=max)){out.innerHTML='<div class="notice err">Pastikan Skor Maksimum &gt; 0 dan Batas 1 &lt; Batas 2 ≤ Skor Maksimum.</div>';return;}
   const groupRaw=COLS[gi].raw,pre=colNum(pi),post=colNum(qi),groups=[...new Set(groupRaw.map(v=>String(v).trim()).filter(Boolean))];
   if(groups.length!==2){out.innerHTML='<div class="notice err">Kolom Kelompok harus memiliki tepat dua kategori.</div>';return;}
+  const rcK=rangeCheck(pre,post,max);
+  if(rcK.over||rcK.neg){out.innerHTML=rangeError(rcK,max).replace(' Uji beda di atas tidak terpengaruh.','')+
+    '<div class="notice warn">Seluruh analisis kategori dijalankan atas N-Gain, sehingga tidak dapat dilanjutkan sebelum rentang skor benar.</div>';return;}
   const baseData=[];
   for(let i=0;i<groupRaw.length;i++){
     const group=String(groupRaw[i]).trim();if(!groups.includes(group)||!Number.isFinite(pre[i])||!Number.isFinite(post[i]))continue;
-    const ngain=KAT_nGain(pre[i],post[i],max);if(!Number.isFinite(ngain))continue;
+    const ngain=nGainIndividual(pre[i],post[i],max);if(!Number.isFinite(ngain))continue;
     baseData.push({group,groupIndex:groups.indexOf(group),pre:pre[i],post:post[i],gain:post[i]-pre[i],ngain});
   }
   const categories=['Rendah','Sedang','Tinggi'];
