@@ -933,14 +933,14 @@ function KAT_residuals(data,groups,categories,key){const res=[];categories.forEa
 function KAT_normality(data,groups,categories){
   const rp=KAT_residuals(data,groups,categories,'post'),rg=KAT_residuals(data,groups,categories,'ngain');
   const sp=rp.length>=3?shapiroWilk(rp):{W:NaN,p:NaN},sg=rg.length>=3?shapiroWilk(rg):{W:NaN,p:NaN};
-  const postNN=Number.isFinite(sp.p)&&sp.p<.05,ngainNN=Number.isFinite(sg.p)&&sg.p<.05;
-  return{post:sp,ngain:sg,n:rp.length,nonparametric:postNN&&ngainNN};
+  const ngainNN=Number.isFinite(sg.p)&&sg.p<.05;
+  return{post:sp,ngain:sg,n:rg.length,nonparametric:ngainNN};
 }
 function KAT_assumptionNote(norm){
   const dec=s=>Number.isFinite(s.p)?(s.p<.05?'Tidak normal':'Normal'):'—';
   const path=norm.nonparametric
-    ?'Residual Posttest <b>dan</b> N-Gain sama-sama tidak normal (Sig. &lt; .05) ⇒ digunakan <b>jalur nonparametrik</b>: Kruskal–Wallis (efek kategori), Mann–Whitney U (efek kelompok), serta uji Dunn / Mann–Whitney U berpasangan untuk uji lanjut.'
-    :'Asumsi normalitas tidak dilanggar secara penuh (minimal satu dari Posttest atau N-Gain normal) ⇒ digunakan <b>jalur parametrik</b>: ANOVA dua jalur beserta uji lanjut parametrik.';
+    ?'Residual <b>N-Gain</b> tidak normal (Sig. &lt; .05) ⇒ digunakan <b>jalur nonparametrik</b>: Kruskal–Wallis (efek kategori), Mann–Whitney U (efek kelompok), serta uji lanjut Dunn (antar kategori) dan uji Mann–Whitney U untuk setiap pasangan kelompok independen dalam tiap kategori, dengan koreksi Bonferroni &amp; Holm. Keputusan didasarkan pada residual N-Gain karena seluruh uji pada bagian ini dijalankan atas N-Gain; residual Posttest ditampilkan sebagai informasi deskriptif.'
+    :'Residual <b>N-Gain</b> normal (Sig. &ge; .05) ⇒ digunakan <b>jalur parametrik</b>: ANOVA dua jalur beserta uji lanjut parametrik. Keputusan didasarkan pada residual N-Gain karena seluruh uji pada bagian ini dijalankan atas N-Gain; residual Posttest ditampilkan sebagai informasi deskriptif.';
   return cap('Uji Asumsi Normalitas (Shapiro–Wilk atas residual model)')+tbl(`<tr><th>Residual</th><th>W</th><th>Sig.</th><th>Keputusan</th></tr>
     <tr><td class="lab">Posttest</td><td>${f3(norm.post.W)}</td><td>${sig(norm.post.p)}</td><td>${dec(norm.post)}</td></tr>
     <tr><td class="lab">N-Gain</td><td>${f3(norm.ngain.W)}</td><td>${sig(norm.ngain.p)}</td><td>${dec(norm.ngain)}</td></tr>`)+interp(path);
