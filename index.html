@@ -587,7 +587,7 @@ function runMode1(){
   const sw=shapiroWilk(diff), ks=ksLilliefors(diff), normal=sw.p>=.05;
   const pt=pairedT(pre,post), wx=wilcoxonSPSS(pre,post), eff=cohenDPaired(pre,post);
 
-  let html=MSI_output(msi)+block('Analisis Satu Kelompok — '+esc(labels[1]),
+  let html=MSI_output(msi)+block( 'Analisis Satu Kelompok — ' + esc(labels[0]) + ' vs ' + esc(labels[1]),
     tPairedStats(pre,post,labels)+
     tNormality([{label:`${labels[1]} − ${labels[0]}`,sw,ks}])+
     interp(`Uji normalitas selisih: Shapiro–Wilk W = ${f3(sw.W)}, Sig. = ${sig(sw.p)} → data ${normal?'<b>berdistribusi normal</b> (Sig. &gt; .05) ⇒ memakai <b>uji-t berpasangan</b>.':'<b>tidak normal</b> (Sig. ≤ .05) ⇒ memakai <b>Wilcoxon signed-rank</b>.'}`));
